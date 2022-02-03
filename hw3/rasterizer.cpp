@@ -149,7 +149,7 @@ auto to_vec4(const Eigen::Vector3f& v3, float w = 1.0f)
     return Vector4f(v3.x(), v3.y(), v3.z(), w);
 }
 
-static bool insideTriangle(int x, int y, const Vector4f* _v){
+static bool insideTriangle(float x, float y, const Vector4f* _v){
     Vector3f v[3];
     for(int i=0;i<3;i++)
         v[i] = {_v[i].x(),_v[i].y(), 1.0};
@@ -259,6 +259,49 @@ static Eigen::Vector2f interpolate(float alpha, float beta, float gamma, const E
 //Screen space rasterization
 void rst::rasterizer::rasterize_triangle(const Triangle& t, const std::array<Eigen::Vector3f, 3>& view_pos) 
 {
+    auto v = t.toVector4();
+    //std::cout << "in rasterize_triangle\n";
+    float min_x = std::max(0.f,std::min(v[0].x(),std::min(v[1].x(),v[2].x())));
+    float max_x = std::min(float(width),std::max(v[0].x(),std::max(v[1].x(),v[2].x())));
+    float min_y = std::max(0.f,std::min(v[0].y(),std::min(v[1].y(),v[2].y())));
+    float max_y = std::min(float(height),std::max(v[0].y(),std::max(v[1].y(),v[2].y())));
+
+    //std::cout<<max_x<<":"<<max_y<<":"<<min_x<<":"<<min_y << "\n";
+    for(int i=min_x;i<max_x+1;i++)
+    {
+        for(int j=min_y;j<max_y+1;j++)
+        {
+            //std::cout<<"i,j="<<i<<":"<<j<<"\n";
+            bool insideTri = false;
+            int idx = get_index(i,j);
+            if (insideTriangle(0.5+i,0.5+j,t.v))
+            {   //std::cout<<"\n i,j,t.v" << i+0.5 << "," << j+0.5 << "\n,v0==\n" << v[0] << "\n,v1==\n" << v[1] << "\n,v2==\n" << v[2] << "\n";
+                auto [alpha,beta,gamma] = computeBarycentric2D(i+0.5,j+0.5,v.data());
+                float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+                float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+                z_interpolated *= w_reciprocal;
+                if (z_interpolated < depth_buf[idx] )
+                {
+                    //auto interpolated_shadingcoords;
+
+                    Eigen::Vector3f interpolated_pose = alpha*view_pos[0]+beta*view_pos[1]+gamma*view_pos[2];
+                    Eigen::Vector3f interpolated_color = alpha*t.color[0]+beta*t.color[1]+gamma*t.color[2];
+                    Eigen::Vector2f interpolated_texcoords = alpha*t.tex_coords[0]+beta*t.tex_coords[1]+gamma*t.tex_coords[2];
+                    Eigen::Vector3f interpolated_normal = alpha*t.normal[0]+beta*t.normal[1]+gamma*t.normal[2];
+                    //std::cout << "abc" <<alpha << "," << beta << ","<<gamma << "\n,~~~~intcor\n" << interpolated_texcoords <<"\n";
+                    //std::cout << "cor~~~\n" <<t.tex_coords[0]<< ",\n ~~~ \n" <<t.tex_coords[1] << ",\n ~~ \n" << t.tex_coords[2] <<"\n ~~~ \n";
+                    interpolated_normal /= interpolated_normal.norm();
+                    fragment_shader_payload payload(interpolated_color,interpolated_normal,interpolated_texcoords, texture ? &*texture : nullptr);
+                    payload.view_pos=interpolated_pose;
+                    depth_buf[idx]= z_interpolated;
+                    auto rt_color = fragment_shader(payload);
+                    //std::cout<<"=========\n"<<rt_color<<"---------\n";
+                    frame_buf[idx]= rt_color;
+                }
+            }
+        }
+    }
+
     // TODO: From your HW3, get the triangle rasterization code.
     // TODO: Inside your rasterization loop:
     //    * v[i].w() is the vertex view space depth value z.
