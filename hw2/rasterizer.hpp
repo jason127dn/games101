@@ -15,7 +15,8 @@ namespace rst
     enum class Buffers
     {
         Color = 1,
-        Depth = 2
+        Depth = 2,
+        SuperFrame = 4
     };
 
     inline Buffers operator|(Buffers a, Buffers b)
@@ -91,10 +92,9 @@ namespace rst
         std::map<int, std::vector<Eigen::Vector3f>> col_buf;
 
         std::vector<Eigen::Vector3f> frame_buf;
-
+        std::vector<Eigen::Vector3f> super_buf;
         std::vector<float> depth_buf;
         int get_index(int x, int y);
-
         int width, height;
 
         int next_id = 0;

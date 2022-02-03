@@ -40,7 +40,7 @@ auto to_vec4(const Eigen::Vector3f& v3, float w = 1.0f)
 }
 
 
-static bool insideTriangle(int x, int y, const Vector3f* _v)
+static bool insideTriangle(float x, float y, const Vector3f* _v)
 {   
     Eigen::Vector3f p = {x,y,1.};
     float s1 = (p-_v[0]).cross(_v[1]-_v[0]).z();
@@ -123,21 +123,33 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
             //std::cout<<"i,j="<<i<<":"<<j<<"\n";
             //std::cout<<max_x<<":"<<max_y<<":"<<min_x<<":"<<min_y << "\n";
             bool insideTri = false;
+            std::vector<std::vector<float>> vectors{{0.25,0.25},{0.25,0.75},{0.75,0.25},{0.75,0.75}};
             int idx = get_index(i,j);
-            if (insideTriangle(i,j,t.v))
-            {   insideTri = true;
-                auto [alpha,beta,gamma] = computeBarycentric2D(i,j,t.v);
-                float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
-                float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
-                z_interpolated *= w_reciprocal;
-                //std::cout <<"z,buff="<< z_interpolated << "," << depth_buf[idx] << "\n";
-                if (z_interpolated < depth_buf[idx])
-                {
-                    //std::cout <<"in droooing\n";
-                    depth_buf[idx]= z_interpolated;
-                    frame_buf[idx]=(t.color[0]*alpha+t.color[1]*beta+t.color[2]*gamma)*255;
+            for (int ii=0;ii<4;ii++)
+            {
+                float di = vectors[ii][0];
+                float dj = vectors[ii][1];
+                if (insideTriangle(di+i,dj+j,t.v))
+                {   insideTri = true;
+                    auto [alpha,beta,gamma] = computeBarycentric2D(i,j,t.v);
+                    float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+                    float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+                    z_interpolated *= w_reciprocal;
+                    int idx_super = 4*idx+ii;
+                    //std::cout <<"z,buff="<< z_interpolated << "," << depth_buf[idx] << "\n";
+                    if (z_interpolated < depth_buf[idx_super])
+                    {
+                        //std::cout <<"in droooing\n";
+                        depth_buf[idx_super]= z_interpolated;
+                        super_buf[idx_super]=(t.color[0]*alpha+t.color[1]*beta+t.color[2]*gamma)*255;
+                    }
                 }
             }
+            if(insideTri)
+            {
+                //frame_buf[idx]=super_buf[idx*4];
+                frame_buf[idx]=(super_buf[idx*4]+super_buf[idx*4+1]+super_buf[idx*4+2]+super_buf[idx*4+3])/4.;
+            } 
         }
     }
     // TODO : Find out the bounding box of current triangle.
@@ -177,12 +189,17 @@ void rst::rasterizer::clear(rst::Buffers buff)
     {
         std::fill(depth_buf.begin(), depth_buf.end(), std::numeric_limits<float>::infinity());
     }
+    if ((buff & rst::Buffers::SuperFrame) == rst::Buffers::SuperFrame)
+    {
+        std::fill(super_buf.begin(), super_buf.end(), Eigen::Vector3f{0, 0, 0});
+    }
 }
 
 rst::rasterizer::rasterizer(int w, int h) : width(w), height(h)
 {
     frame_buf.resize(w * h);
-    depth_buf.resize(w * h);
+    depth_buf.resize(w * h * 4);
+    super_buf.resize(w * h * 4);
 }
 
 int rst::rasterizer::get_index(int x, int y)
