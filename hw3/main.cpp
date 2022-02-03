@@ -223,6 +223,32 @@ Eigen::Vector3f displacement_fragment_shader(const fragment_shader_payload& payl
     // Normal n = normalize(TBN * ln)
 
 
+    Eigen::Vector3f n = normal.normalized();
+    float x = n[0];
+    float y = n[1];
+    float z = n[2];
+
+    Eigen::Vector3f t = {x*y/sqrt(x*x+z*z),sqrt(x*x+z*z),z*y/sqrt(x*x+z*z)};
+    t=t.normalized();
+    Eigen::Vector3f b = n.cross(t);
+
+    // Matrix TBN = [t b n]
+    Eigen::Matrix3f TBN;
+    TBN << t[0],b[0],n[0],t[1],b[1],n[1],t[2],b[2],n[2];
+    //TBN.transposeInPlace();
+    float dw = 1./payload.texture->width;
+    float dh = 1./payload.texture->height;
+    float huv = payload.texture->getColor(payload.tex_coords.x(),payload.tex_coords.y())[0];
+    float hu_v = payload.texture->getColor(payload.tex_coords.x()+dw,payload.tex_coords.y())[0];
+    float huv_ = payload.texture->getColor(payload.tex_coords.x(),payload.tex_coords.y()+dh)[0];
+    float dU = kh * kn * (hu_v-huv);
+    float dV = kh * kn * (huv_-huv);
+    
+    Eigen::Vector3f ln = {-dU, -dV, 1};
+    Eigen::Vector3f norm = (TBN * ln);
+
+    Eigen::Vector3f p_dis = point + kn*norm*huv;
+    norm = norm.normalized();
     Eigen::Vector3f result_color = {0, 0, 0};
 
     for (auto& light : lights)
@@ -230,6 +256,16 @@ Eigen::Vector3f displacement_fragment_shader(const fragment_shader_payload& payl
         // TODO: For each light source in the code, calculate what the *ambient*, *diffuse*, and *specular* 
         // components are. Then, accumulate that result on the *result_color* object.
 
+        Eigen::Vector3f l_vector= light.position-p_dis;
+        Eigen::Vector3f e_vector= eye_pos-p_dis;
+        float r = l_vector.norm();
+        l_vector = l_vector/r;
+        e_vector = e_vector.normalized();
+        Eigen::Vector3f h = (l_vector+e_vector).normalized();
+        Eigen::Vector3f ir2 = light.intensity/std::pow(r,2); 
+        Eigen::Vector3f lb = kd.cwiseProduct(ir2*std::max(0.f,norm.dot(l_vector)));
+        Eigen::Vector3f ls = ks.cwiseProduct(ir2*std::pow(std::max(0.f,norm.dot(h)),p));
+        result_color += lb+ls ;
 
     }
 
@@ -300,7 +336,7 @@ int main(int argc, const char** argv)
 {
     std::vector<Triangle*> TriangleList;
 
-    float angle = 140.0;
+    float angle = 0.0;
     bool command_line = false;
 
     std::string filename = "output.png";
@@ -336,29 +372,29 @@ int main(int argc, const char** argv)
         command_line = true;
         filename = std::string(argv[1]);
 
-        if (argc == 3 && std::string(argv[2]) == "texture")
+        if (argc >= 3 && std::string(argv[2]) == "texture")
         {
             std::cout << "Rasterizing using the texture shader\n";
             active_shader = texture_fragment_shader;
             texture_path = "spot_texture.png";
             r.set_texture(Texture(obj_path + texture_path));
         }
-        else if (argc == 3 && std::string(argv[2]) == "normal")
+        else if (argc >= 3 && std::string(argv[2]) == "normal")
         {
             std::cout << "Rasterizing using the normal shader\n";
             active_shader = normal_fragment_shader;
         }
-        else if (argc == 3 && std::string(argv[2]) == "phong")
+        else if (argc >= 3 && std::string(argv[2]) == "phong")
         {
             std::cout << "Rasterizing using the phong shader\n";
             active_shader = phong_fragment_shader;
         }
-        else if (argc == 3 && std::string(argv[2]) == "bump")
+        else if (argc >= 3 && std::string(argv[2]) == "bump")
         {
             std::cout << "Rasterizing using the bump shader\n";
             active_shader = bump_fragment_shader;
         }
-        else if (argc == 3 && std::string(argv[2]) == "displacement")
+        else if (argc >= 3 && std::string(argv[2]) == "displacement")
         {
             std::cout << "Rasterizing using the bump shader\n";
             active_shader = displacement_fragment_shader;
@@ -373,20 +409,22 @@ int main(int argc, const char** argv)
     int key = 0;
     int frame_count = 0;
 
-    if (command_line)
+    if (argc==4)
     {
-        r.clear(rst::Buffers::Color | rst::Buffers::Depth);
-        r.set_model(get_model_matrix(angle));
-        r.set_view(get_view_matrix(eye_pos));
-        r.set_projection(get_projection_matrix(45.0, 1, 0.1, 50));
+        for (int i=std::stoi(argv[3]);i<360;i+=10)
+        {
+            r.clear(rst::Buffers::Color | rst::Buffers::Depth);
+            r.set_model(get_model_matrix(float(i)));
+            r.set_view(get_view_matrix(eye_pos));
+            r.set_projection(get_projection_matrix(45.0, 1, 0.1, 50));
 
-        r.draw(TriangleList);
-        cv::Mat image(700, 700, CV_32FC3, r.frame_buffer().data());
-        image.convertTo(image, CV_8UC3, 1.0f);
-        cv::cvtColor(image, image, cv::COLOR_RGB2BGR);
-
-        cv::imwrite(filename, image);
-
+            r.draw(TriangleList);
+            cv::Mat image(700, 700, CV_32FC3, r.frame_buffer().data());
+            image.convertTo(image, CV_8UC3, 1.0f);
+            cv::cvtColor(image, image, cv::COLOR_RGB2BGR);
+            std::cout << i << "\n";
+            cv::imwrite(filename+std::to_string(i)+".png", image);
+        }
         return 0;
     }
 
@@ -410,11 +448,11 @@ int main(int argc, const char** argv)
 
         if (key == 'a' )
         {
-            angle -= 0.1;
+            angle -= 15;
         }
         else if (key == 'd')
         {
-            angle += 0.1;
+            angle += 15;
         }
 
     }
