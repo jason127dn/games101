@@ -5,7 +5,24 @@
 #include <opencv2/opencv.hpp>
 
 constexpr double MY_PI = 3.1415926;
+Eigen::Matrix4f get_rotation(Eigen::Vector3f axis,float angle)
+{
 
+    angle = angle*MY_PI/180.;
+    
+    Eigen::Matrix4f rotation;
+    float cost = std::cos(angle);
+    float sint = std::sin(angle);
+    float n = axis.norm();
+    float x = axis[0]/n;
+    float y = axis[1]/n;
+    float z = axis[2]/n;
+    rotation << cost+(1-cost)*x*x,(1-cost)*x*y-sint*z,(1-cost)*x*z+sint*y,0.,
+                (1-cost)*y*x+sint*z,cost+(1-cost)*y*y,(1-cost)*y*z-sint*x,0.,
+                (1-cost)*z*x-sint*y, (1-cost)*z*y+sint*x, cost+(1-cost)*z*z,0.,
+                0.,0.,0.,1.;
+    return rotation;
+}
 Eigen::Matrix4f get_view_matrix(Eigen::Vector3f eye_pos)
 {
     Eigen::Matrix4f view = Eigen::Matrix4f::Identity();
@@ -86,6 +103,7 @@ int main(int argc, const char** argv)
 
     std::vector<Eigen::Vector3i> ind{{0, 1, 2}};
 
+    Eigen::Vector3f raxis = {0., 0., 1.1};
     auto pos_id = r.load_positions(pos);
     auto ind_id = r.load_indices(ind);
 
@@ -95,7 +113,7 @@ int main(int argc, const char** argv)
     if (command_line) {
         r.clear(rst::Buffers::Color | rst::Buffers::Depth);
 
-        r.set_model(get_model_matrix(angle));
+        r.set_model(get_rotation(raxis,angle));
         r.set_view(get_view_matrix(eye_pos));
         r.set_projection(get_projection_matrix(45, 1, 0.1, 50));
 
@@ -111,7 +129,7 @@ int main(int argc, const char** argv)
     while (key != 27) {
         r.clear(rst::Buffers::Color | rst::Buffers::Depth);
 
-        r.set_model(get_model_matrix(angle));
+        r.set_model(get_rotation(raxis,angle));
         r.set_view(get_view_matrix(eye_pos));
         r.set_projection(get_projection_matrix(45, 1, 0.1, 50));
 
@@ -129,6 +147,25 @@ int main(int argc, const char** argv)
         }
         else if (key == 'd') {
             angle -= 10;
+        }
+        else if (key == 'i') {
+            raxis[0]+=1;
+        }
+        
+        else if (key == 'k') {
+            raxis[0]+=-1;
+        }
+        else if (key == 'j') {
+            raxis[1]+=1;
+        }
+        else if (key == 'l') {
+            raxis[1]+=-1;
+        }
+        else if (key == 'u') {
+            raxis[2]+=1;
+        }
+        else if (key == 'o') {
+            raxis[2]+=-1;
         }
     }
 
