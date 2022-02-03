@@ -42,6 +42,11 @@ auto to_vec4(const Eigen::Vector3f& v3, float w = 1.0f)
 
 static bool insideTriangle(int x, int y, const Vector3f* _v)
 {   
+    Eigen::Vector3f p = {x,y,1.};
+    float s1 = (p-_v[0]).cross(_v[1]-_v[0]).z();
+    float s2 = (p-_v[1]).cross(_v[2]-_v[1]).z();
+    float s3 = (p-_v[2]).cross(_v[0]-_v[2]).z();
+    return (s1 > 0 && s2 > 0 && s3 > 0) ||(s1 < 0 && s2 < 0 && s3 < 0); 
     // TODO : Implement this function to check if the point (x, y) is inside the triangle represented by _v[0], _v[1], _v[2]
 }
 
@@ -105,7 +110,36 @@ void rst::rasterizer::draw(pos_buf_id pos_buffer, ind_buf_id ind_buffer, col_buf
 //Screen space rasterization
 void rst::rasterizer::rasterize_triangle(const Triangle& t) {
     auto v = t.toVector4();
+    //std::cout << "in rasterize_triangle\n";
+    float min_x = std::max(0.f,std::min(v[0].x(),std::min(v[1].x(),v[2].x())));
+    float max_x = std::min(float(width),std::max(v[0].x(),std::max(v[1].x(),v[2].x())));
+    float min_y = std::max(0.f,std::min(v[0].y(),std::min(v[1].y(),v[2].y())));
+    float max_y = std::min(float(height),std::max(v[0].y(),std::max(v[1].y(),v[2].y())));
     
+    for(int i=min_x;i<max_x;i++)
+    {
+        for(int j=min_y;j<max_y;j++)
+        {
+            //std::cout<<"i,j="<<i<<":"<<j<<"\n";
+            //std::cout<<max_x<<":"<<max_y<<":"<<min_x<<":"<<min_y << "\n";
+            bool insideTri = false;
+            int idx = get_index(i,j);
+            if (insideTriangle(i,j,t.v))
+            {   insideTri = true;
+                auto [alpha,beta,gamma] = computeBarycentric2D(i,j,t.v);
+                float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+                float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+                z_interpolated *= w_reciprocal;
+                //std::cout <<"z,buff="<< z_interpolated << "," << depth_buf[idx] << "\n";
+                if (z_interpolated < depth_buf[idx])
+                {
+                    //std::cout <<"in droooing\n";
+                    depth_buf[idx]= z_interpolated;
+                    frame_buf[idx]=(t.color[0]*alpha+t.color[1]*beta+t.color[2]*gamma)*255;
+                }
+            }
+        }
+    }
     // TODO : Find out the bounding box of current triangle.
     // iterate through the pixel and find if the current pixel is inside the triangle
 
