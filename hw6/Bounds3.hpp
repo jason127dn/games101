@@ -97,6 +97,44 @@ inline bool Bounds3::IntersectP(const Ray& ray, const Vector3f& invDir,
     // dirIsNeg: ray direction(x,y,z), dirIsNeg=[int(x>0),int(y>0),int(z>0)], use this to simplify your logic
     // TODO test if ray bound intersects
     
+    Vector3f t_min = (pMin - ray.origin)*invDir;
+    Vector3f t_max = (pMax - ray.origin)*invDir;
+    //std::cout <<"\norg\n" << ray.origin <<  "\ninvdir\n" << invDir << "\ndirisn\n" << dirIsNeg[0] << dirIsNeg[1] << dirIsNeg[2] << "\npmin"<< pMin << "\ntmin\n" <<t_min << "\npmax\n" << pMax << "\ntmax\n" << t_max << "\n"; 
+    float x1,x2,y1,y2,z1,z2;
+    if(dirIsNeg[0]>0)
+    {
+        x1 = t_min.x;
+        x2 = t_max.x;
+    }
+    else
+    {
+        x2 = t_min.x;
+        x1 = t_max.x;
+    }
+
+    if(dirIsNeg[1]>0)
+    {
+        y1 = t_min.y;
+        y2 = t_max.y;
+    }
+    else
+    {
+        y2 = t_min.y;
+        y1 = t_max.y;
+    }
+    if(dirIsNeg[2]>0)
+    {
+        z1 = t_min.z;
+        z2 = t_max.z;
+    }
+    else
+    {
+        z2 = t_min.z;
+        z1 = t_max.z;
+    }
+    float all_min = std::max(x1,std::max(y1,z1));
+    float all_max = std::min(x2,std::min(y2,z2));
+    return ((all_min < all_max) && (all_max > 0.));
 }
 
 inline Bounds3 Union(const Bounds3& b1, const Bounds3& b2)
